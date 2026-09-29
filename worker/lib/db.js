@@ -35,14 +35,18 @@ export async function incrementVisit(env, cardId) {
   }));
 }
 
+// Insere o lead com idempotência por envio_id. Em caso de reenvio com o mesmo
+// envio_id, o PostgREST devolve [] (resolution=ignore-duplicates) e devolvemos
+// null para sinalizar duplicado sem gerar nova notificação.
 export async function insertLead(env, row) {
-  const response = await checked(await fetch(restUrl(env, '/leads'), {
+  const response = await checked(await fetch(restUrl(env, '/leads?on_conflict=envio_id'), {
     method: 'POST',
-    headers: headers(env, { Prefer: 'return=representation' }),
+    headers: headers(env, { Prefer: 'resolution=ignore-duplicates,return=representation' }),
     body: JSON.stringify(row),
   }));
   const rows = await response.json();
-  return Array.isArray(rows) ? rows[0] : rows;
+  if (Array.isArray(rows)) return rows[0] || null;
+  return rows;
 }
 
 export async function insertNotification(env, row) {

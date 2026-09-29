@@ -1,10 +1,33 @@
 import { escapeAttr, escapeHtml, safeUrl } from '../lib/escape.js';
 import { labels } from '../lib/i18n.js';
-import { CHAT_WIDGET_JS } from './chat-widget.js';
+import { CHAT_WIDGET_SRC } from './chat-widget.js';
 import { renderLayout } from './layout.js';
 
 const text = (value) => escapeHtml(value || '');
 const digits = (value) => String(value || '').replace(/\D/g, '');
+
+const ICONS = {
+  whatsapp: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  email: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+  instagram: '<rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/>',
+  schedule: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  save: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  share: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/>',
+};
+
+function tileIcon(inner) {
+  return '<svg class="tile-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg>';
+}
+
+function tile(label, href, icon, extra = '') {
+  return '<a class="action-tile" href="' + escapeAttr(href) + '"' + extra + '>'
+    + tileIcon(icon) + '<span class="tile-label">' + text(label) + '</span></a>';
+}
+
+function tileButton(label, attrs, icon) {
+  return '<button class="action-tile" type="button"' + attrs + '>'
+    + tileIcon(icon) + '<span class="tile-label">' + text(label) + '</span></button>';
+}
 
 function instagramUrl(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -14,15 +37,14 @@ function instagramUrl(value) {
     : safeUrl(raw);
 }
 
-function linkTile(label, url, extra = '') {
-  const safe = safeUrl(url);
-  return safe ? '<a class="action-tile" href="' + escapeAttr(safe) + '"' + extra + '>' + text(label) + '</a>' : '';
-}
-
-function renderWidget(card, slug) {
+function renderWidget(card, slug, locale) {
   if (!card.chat_enabled) return '';
-  return '<script src="/c/assets/chat.js" defer></script>'
-    + '<div id="cd-chat" data-slug="' + escapeAttr(slug) + '" data-nome="' + escapeAttr(card.nome) + '" data-mode="floating"></div>';
+  return '<script src="' + CHAT_WIDGET_SRC + '" defer></script>'
+    + '<div id="cd-chat" data-slug="' + escapeAttr(slug)
+    + '" data-nome="' + escapeAttr(card.nome)
+    + '" data-mode="floating"'
+    + ' data-label="' + escapeAttr(locale.chat || 'Fale comigo') + '"'
+    + '></div>';
 }
 
 export function renderCard(card, env, { canonicalPath = '/c/' + card.slug } = {}) {
@@ -32,15 +54,16 @@ export function renderCard(card, env, { canonicalPath = '/c/' + card.slug } = {}
   const whatsapp = digits(card.whatsapp_e164 || card.telefone_e164);
   const instagram = instagramUrl(card.instagram);
   const email = card.email ? safeUrl('mailto:' + encodeURIComponent(card.email)) : null;
+  const agenda = safeUrl(card.agenda_url);
   const map = safeUrl(card.maps_url);
   const shareUrl = String(env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + canonicalPath;
   const actionTiles = [
-    whatsapp ? '<a class="action-tile" href="https://wa.me/' + escapeAttr(whatsapp) + '">' + text(locale.phone === 'Celular' ? 'WhatsApp' : 'WhatsApp') + '</a>' : '',
-    email ? '<a class="action-tile" href="' + escapeAttr(email) + '">' + text(locale.email) + '</a>' : '',
-    instagram ? '<a class="action-tile" href="' + escapeAttr(instagram) + '" target="_blank" rel="noopener">' + text('Instagram') + '</a>' : '',
-    linkTile(locale.schedule, card.agenda_url, ' target="_blank" rel="noopener"'),
-    '<a class="action-tile" href="/c/' + escapeAttr(slug) + '/vcard">' + text(locale.save) + '</a>',
-    '<button class="action-tile" type="button" data-share-url="' + escapeAttr(shareUrl) + '">' + text(locale.share) + '</button>',
+    whatsapp ? tile('WhatsApp', 'https://wa.me/' + whatsapp, ICONS.whatsapp) : '',
+    email ? tile(locale.email, email, ICONS.email) : '',
+    instagram ? tile('Instagram', instagram, ICONS.instagram, ' target="_blank" rel="noopener"') : '',
+    agenda ? tile(locale.schedule, agenda, ICONS.schedule, ' target="_blank" rel="noopener"') : '',
+    tile(locale.save, '/c/' + slug + '/vcard', ICONS.save),
+    tileButton(locale.share, ' data-share-url="' + escapeAttr(shareUrl) + '"', ICONS.share),
   ].join('');
   const services = Array.isArray(card.servicos) && card.servicos.length
     ? '<section class="services" aria-label="Serviços">' + card.servicos.map((item) => '<span class="chip">' + text(item) + '</span>').join('') + '</section>'
@@ -77,7 +100,7 @@ export function renderCard(card, env, { canonicalPath = '/c/' + card.slug } = {}
     + '<section class="action-grid">' + actionTiles + '</section>'
     + services + linksSection + address + socialSection
     + '<footer class="footer"><div>' + owner + '</div><div>' + text(locale.privacy) + '</div><div>Cartão Digital</div></footer>'
-    + '</main>' + (card.chat_enabled ? renderWidget(card, slug) : (whatsapp ? '<a class="floating-cta" href="https://wa.me/' + escapeAttr(whatsapp) + '">' + text(locale.chat) + '</a>' : '')) + script;
+    + '</main>' + (card.chat_enabled ? renderWidget(card, slug, locale) : (whatsapp ? '<a class="floating-cta" href="https://wa.me/' + escapeAttr(whatsapp) + '">' + text(locale.chat) + '</a>' : '')) + script;
   return renderLayout({
     title: String(card.nome || '') + (card.cargo ? ' — ' + card.cargo : ''),
     description: String(card.bio || '').slice(0, 160),

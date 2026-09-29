@@ -107,6 +107,7 @@ async function handleLead(request, env, ctx) {
   let lead;
   try {
     lead = await insertLead(env, {
+      envio_id: leadData.envio_id,
       card_id: card.id,
       intencao: leadData.intencao,
       sub_intencao: leadData.sub_intencao,
@@ -121,15 +122,16 @@ async function handleLead(request, env, ctx) {
     console.error('lead insert failed', error instanceof Error ? error.message : 'unknown');
     return json({ ok: false }, 500);
   }
+  const recipient = String(card.whatsapp_e164 || '').replace(/\D/g, '');
+  const whatsappUrl = recipient ? 'https://wa.me/' + recipient : null;
+  if (!lead) {
+    // envio_id já existia: duplicado, responde sucesso sem avisos/notificações.
+    return json({ ok: true, duplicado: true, nome_corretor: card.nome, whatsapp_url: whatsappUrl });
+  }
   ctx.waitUntil(notifyLead(env, card, lead).catch((error) => {
     console.error('lead notification failed', error instanceof Error ? error.message : 'unknown');
   }));
-  const recipient = String(card.whatsapp_e164 || '').replace(/\D/g, '');
-  return json({
-    ok: true,
-    nome_corretor: card.nome,
-    whatsapp_url: recipient ? 'https://wa.me/' + recipient : null,
-  });
+  return json({ ok: true, nome_corretor: card.nome, whatsapp_url: whatsappUrl });
 }
 
 async function handlePublicCard(request, env, ctx, slug, suffix = '') {

@@ -23,3 +23,18 @@ test('beacon e dicionário de locale', () => {
   assert.match(ptpt, /Guardar/);
   assert.equal(ptpt.includes('beacon.min.js'), false);
 });
+
+test('tiles usam ícone SVG âmbar acima do label', () => {
+  const html = renderCard(card({ chat_enabled: false }), makeEnv());
+  const icons = html.match(/class="tile-icon"/g) || [];
+  assert.equal(icons.length, 6);
+  assert.match(html, /class="tile-icon"[^>]*stroke="currentColor"/);
+  assert.match(html, /width="22" height="22"/);
+  assert.match(html, /class="tile-label"/);
+});
+
+test('script do chat carrega versão derivada do conteúdo (cache-busting)', () => {
+  const html = renderCard(card({ chat_enabled: true }), makeEnv());
+  assert.match(html, /src="\/c\/assets\/chat\.js\?v=[0-9a-f]{8}"/);
+  assert.doesNotMatch(renderCard(card({ chat_enabled: false }), makeEnv()), /assets\/chat\.js/);
+});

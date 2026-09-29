@@ -10,11 +10,16 @@ const SUBS = {
   arrendamento: new Set(['procuro_casa', 'tenho_imovel']),
   compra_venda: new Set(['comprar', 'vender']),
 };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isValidSlug(value) {
   return typeof value === 'string'
     && /^[a-z0-9-]{3,40}$/.test(value)
     && !RESERVED_SLUGS.has(value);
+}
+
+export function isValidEnvioId(value) {
+  return typeof value === 'string' && UUID_RE.test(value.trim());
 }
 
 export function normalizePhoneE164(input) {
@@ -40,6 +45,7 @@ export function sanitizeUtm(input) {
 export function validateLead(input = {}) {
   const erros = {};
   const value = input && typeof input === 'object' ? input : {};
+  const envioId = typeof value.envio_id === 'string' ? value.envio_id.trim() : '';
   const slug = typeof value.slug === 'string' ? value.slug.trim() : '';
   const intencao = typeof value.intencao === 'string' ? value.intencao : '';
   const sub = typeof value.sub_intencao === 'string' ? value.sub_intencao.trim() : '';
@@ -48,6 +54,7 @@ export function validateLead(input = {}) {
   const whatsapp = normalizePhoneE164(value.whatsapp);
   const mensagem = typeof value.mensagem === 'string' ? value.mensagem.trim() : '';
 
+  if (!isValidEnvioId(envioId)) erros.envio_id = 'Identificador de envio inválido.';
   if (!isValidSlug(slug)) erros.slug = 'Slug inválido.';
   if (!INTENCOES.has(intencao)) erros.intencao = 'Escolha uma intenção válida.';
   if (intencao !== 'estudo_mercado' && sub && !SUBS[intencao]?.has(sub)) {
@@ -63,6 +70,7 @@ export function validateLead(input = {}) {
   if (value.consent !== true) erros.consent = 'O consentimento é obrigatório.';
 
   const normalized = {
+    envio_id: envioId.toLowerCase(),
     slug,
     intencao,
     sub_intencao: sub || null,
