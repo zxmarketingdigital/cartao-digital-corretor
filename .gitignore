@@ -7,3 +7,5 @@ node_modules/
 .DS_Store
 *.OK
 *.bak*
+run*.log
+.dev-autonomo-log.tsv
