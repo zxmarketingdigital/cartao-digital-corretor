@@ -57,7 +57,7 @@ export function validateLead(input = {}) {
   if (!isValidEnvioId(envioId)) erros.envio_id = 'Identificador de envio inválido.';
   if (!isValidSlug(slug)) erros.slug = 'Slug inválido.';
   if (!INTENCOES.has(intencao)) erros.intencao = 'Escolha uma intenção válida.';
-  if (intencao !== 'estudo_mercado' && sub && !SUBS[intencao]?.has(sub)) {
+  if (INTENCOES.has(intencao) && intencao !== 'estudo_mercado' && !SUBS[intencao]?.has(sub)) {
     erros.sub_intencao = 'Escolha uma opção válida.';
   }
   if (intencao === 'estudo_mercado' && (sub.length < 2 || sub.length > 120)) {

@@ -59,3 +59,11 @@ test('exige envio_id UUID válido', () => {
   assert.equal(ok.ok, true);
   assert.equal(ok.value.envio_id, 'abcdef01-2345-6789-abcd-ef0123456789');
 });
+
+test('arrendamento e compra_venda exigem subintenção válida', () => {
+  for (const intencao of ['arrendamento', 'compra_venda']) {
+    assert.equal(validateLead(base({ intencao, sub_intencao: '' })).ok, false);
+    assert.equal(validateLead(base({ intencao, sub_intencao: undefined })).ok, false);
+    assert.equal(validateLead(base({ intencao, sub_intencao: 'outra' })).ok, false);
+  }
+});
