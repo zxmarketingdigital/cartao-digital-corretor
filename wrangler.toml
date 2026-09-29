@@ -1,0 +1,14 @@
+name = "zx-cartao"
+main = "worker/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+PUBLIC_BASE_URL = ""
+EMAIL_FROM = ""
+EVOLUTION_INSTANCE = "avisos-cartao"
+CF_BEACON_TOKEN = ""
+ZX_CARD_SLUG = "zxlab"
+
+# routes = [{pattern="<dominio>/c/*", zone_name="<dominio>"}, {pattern="<dominio>/cartao-visita*", zone_name="<dominio>"}]
+# Secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY,
+# EVOLUTION_API_URL, EVOLUTION_API_KEY
