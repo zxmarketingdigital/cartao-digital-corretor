@@ -185,6 +185,11 @@ async function webhook(request, env) {
   }
 
   if (type === 'PAYMENT.CAPTURE.REFUNDED') {
+    // Só reembolso integral muda o estado; parcial fica registado no PayPal e o pedido segue como está.
+    if (resource?.amount?.value !== productPrice(env).toFixed(2) || resource?.amount?.currency_code !== 'EUR') {
+      console.error('PAYMENT.CAPTURE.REFUNDED parcial ignorado');
+      return json({ ok: true });
+    }
     let orderId = declaredOrderId ? String(declaredOrderId) : null;
     if (!orderId) {
       const captureId = captureIdFromLinks(resource?.links);

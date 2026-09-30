@@ -123,7 +123,7 @@ test('webhook inválido é rejeitado e eventos REFUNDED/COMPLETED são idempoten
   const completed = completedBody();
   assert.equal((await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body: completed }), env)).status, 200);
   assert.equal(orders[0].status, 'pago');
-  const refunded = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.REFUNDED', resource: { supplementary_data: { related_ids: { order_id: 'PAYPAL-ORDER-1' } } } });
+  const refunded = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.REFUNDED', resource: { amount: { value: '123.45', currency_code: 'EUR' }, supplementary_data: { related_ids: { order_id: 'PAYPAL-ORDER-1' } } } });
   assert.equal((await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body: refunded }), env)).status, 200);
   assert.equal(orders[0].status, 'reembolsado');
   const count = patches.length;
@@ -153,7 +153,7 @@ test('webhook COMPLETED com moeda USD não faz PATCH', async () => {
 
 test('webhook REFUNDED usa status=in.(criado,pago)', async () => {
   orders.push(order('00000000-0000-4000-8000-000000000001', 'pago'));
-  const body = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.REFUNDED', resource: { supplementary_data: { related_ids: { order_id: 'PAYPAL-ORDER-1' } } } });
+  const body = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.REFUNDED', resource: { amount: { value: '123.45', currency_code: 'EUR' }, supplementary_data: { related_ids: { order_id: 'PAYPAL-ORDER-1' } } } });
   const response = await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body }), env);
   assert.equal(response.status, 200);
   assert.equal(orders[0].status, 'reembolsado');
@@ -162,7 +162,7 @@ test('webhook REFUNDED usa status=in.(criado,pago)', async () => {
 
 test('webhook REFUNDED sem order_id resolve via GET /v2/payments/captures/<id> no host sandbox', async () => {
   orders.push(order('00000000-0000-4000-8000-000000000001', 'pago'));
-  const body = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.REFUNDED', resource: { links: [{ rel: 'up', href: 'https://captures.example.test/v2/payments/captures/CAPTURE-1' }] } });
+  const body = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.REFUNDED', resource: { amount: { value: '123.45', currency_code: 'EUR' }, links: [{ rel: 'up', href: 'https://captures.example.test/v2/payments/captures/CAPTURE-1' }] } });
   const response = await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body }), env);
   assert.equal(response.status, 200);
   const lookup = paypalCalls.find((call) => call.method === 'GET' && call.url.includes('/v2/payments/captures/CAPTURE-1'));
@@ -170,6 +170,15 @@ test('webhook REFUNDED sem order_id resolve via GET /v2/payments/captures/<id> n
   assert.match(lookup.url, /^https:\/\/api-m\.sandbox\.paypal\.com/);
   assert.equal(orders[0].status, 'reembolsado');
   assert.ok(patches.some((patch) => /status=in\.\(criado,pago\)/.test(patch.url)));
+});
+
+test('webhook REFUNDED parcial não altera o pedido', async () => {
+  orders.push(order('00000000-0000-4000-8000-000000000001', 'pago'));
+  const body = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.REFUNDED', resource: { amount: { value: '20.00', currency_code: 'EUR' }, supplementary_data: { related_ids: { order_id: 'PAYPAL-ORDER-1' } } } });
+  const response = await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body }), env);
+  assert.equal(response.status, 200);
+  assert.equal(orders[0].status, 'pago');
+  assert.equal(patches.length, 0);
 });
 
 test('webhook COMPLETED depois de reembolsado não altera e mantém status=eq.criado', async () => {

@@ -43,7 +43,7 @@ LP  <dominio>/cartao-digital
 
 Cartão  <dominio>/c/<nome>        (Cloudflare Worker, renderização no servidor)
  ├─ tracking: Cloudflare Web Analytics (beacon) + registo de visita próprio (para o painel)
- └─ chat guiado → POST /api/lead
+ └─ chat guiado → POST /c/api/lead
       ├─ grava lead (Supabase)
       ├─ e-mail ao corretor (Resend)
       └─ WhatsApp ao corretor (Evolution API — instância dedicada, 1 balão)
@@ -69,14 +69,15 @@ Painel  <dominio>/c/painel         (Supabase Auth — magic link)
 |---|---|---|
 | `/cartao-digital` | GET | LP de venda |
 | `/cartao-digital/criar?pedido=<id>` | GET | Formulário de criação (valida pedido pago e sem cartão) |
-| `/api/cartao` | POST | Cria o cartão a partir do formulário (valida pedido, slug, dados) |
-| `/api/paypal/order` | POST | Cria ordem PayPal €97 EUR |
-| `/api/paypal/capture` | POST | Captura a ordem aprovada |
-| `/api/paypal/webhook` | POST | Verifica assinatura do webhook e marca pedido como pago (idempotente) |
+| `/c/api/cartao` | POST | Cria o cartão a partir do formulário (valida pedido, slug, dados) |
+| `/c/api/paypal/order` | POST | Cria ordem PayPal €97 EUR |
+| `/c/api/paypal/capture` | POST | Captura a ordem aprovada |
+| `/c/api/paypal/webhook` | POST | Verifica assinatura do webhook e marca pedido como pago (idempotente) |
 | `/c/<nome>` | GET | Cartão (render servidor) + registo de visita |
 | `/c/<nome>/chat` | GET | Chat em página cheia |
 | `/c/<nome>/vcard` | GET | Ficheiro `.vcf` "Guardar contacto" |
-| `/api/lead` | POST | Recebe lead do chat |
+| `/c/api/lead` | POST | Recebe lead do chat |
+| `/c/api/slug?s=<nome>` | GET | Verifica se o endereço do cartão está livre |
 | `/c/painel` | GET | Painel do corretor (exige sessão Supabase) |
 | `/cartao-visita` | GET | Cartão da própria empresa (mesmo template, registo especial) |
 
@@ -113,14 +114,14 @@ notifications (id uuid pk, lead_id uuid → leads, canal text check in ('email',
 2. Captura aprovada → Worker grava `orders.status='pago'`. O webhook confirma de forma **idempotente** (mesmo evento 2× não duplica).
 3. Redireciona para `/cartao-digital/criar?pedido=<id>`. O `id` é UUID não adivinhável; **nenhum dado pessoal na URL**.
 4. Formulário (PT-PT): nome, cargo, agência, AMI, foto (upload), telemóvel, WhatsApp, e-mail, morada, redes, serviços, bio, slug desejado (sugerido a partir do nome, verificação de disponibilidade em tempo real).
-5. `POST /api/cartao` → valida pedido pago e sem cartão → cria utilizador Supabase (e-mail) → cria `cards` → devolve URL.
+5. `POST /c/api/cartao` → valida pedido pago e sem cartão → cria utilizador Supabase (e-mail) → cria `cards` → devolve URL.
 6. E-mail de boas-vindas: link do cartão, link do painel, QR code.
 
 ### 6.2 Lead pelo chat
 1. Botão flutuante "Fale comigo" → passo 1: intenção (3 opções).
 2. Passo 2 (opcional por intenção): *Arrendamento* → "Procuro casa" / "Tenho um imóvel"; *Compra e venda* → "Quero comprar" / "Quero vender"; *Estudo de mercado* → morada/zona do imóvel (texto livre curto).
 3. Passo 3: nome, e-mail, WhatsApp (formato internacional E.164, **aceita qualquer país**, prefixo +351 sugerido) + checkbox de consentimento RGPD.
-4. `POST /api/lead` → grava → dispara e-mail e WhatsApp → mostra confirmação "A <nome> vai contactá-lo em breve" + botão para abrir o WhatsApp do corretor.
+4. `POST /c/api/lead` → grava → dispara e-mail e WhatsApp → mostra confirmação "A <nome> vai contactá-lo em breve" + botão para abrir o WhatsApp do corretor.
 5. Falha de notificação **não** perde o lead: grava em `notifications` com `status='falhou'` e aparece no painel.
 
 ### 6.3 Mensagem de aviso ao corretor (1 balão)
@@ -148,7 +149,7 @@ Ver no painel: <dominio>/c/painel
 - Pagamento confirmado **no servidor** (captura + webhook com verificação de assinatura PayPal).
 - `pedido` = UUID; o formulário só cria cartão uma vez por pedido.
 - `slug` validado por regex, lista de reservados (`painel`, `api`, `admin`, `cartao-visita`, …) e unicidade.
-- `/api/lead`: validação de campos, honeypot anti-bot, consentimento obrigatório, escape de todo o conteúdo renderizado (sem XSS em nome/bio).
+- `/c/api/lead`: validação de campos, honeypot anti-bot, consentimento obrigatório, escape de todo o conteúdo renderizado (sem XSS em nome/bio).
 - Nunca dados pessoais em query string. Segredos só em variáveis do Worker (`wrangler secret`), nunca no repositório.
 - Política de privacidade e identificação do responsável (corretor) no rodapé do cartão.
 
@@ -178,7 +179,7 @@ IA conversacional · mensalidade/renovação · domínio próprio por corretor �
 
 ## 13. Ordem de implementação
 1. **Base**: Supabase (migrations + RLS) · Worker com rotas `/c/<nome>` e template C · cartão da própria empresa em `/cartao-visita`.
-2. **Chat + leads + avisos**: `/api/lead`, e-mail, WhatsApp, registo de falhas.
+2. **Chat + leads + avisos**: `/c/api/lead`, e-mail, WhatsApp, registo de falhas.
 3. **Painel**: login mágico, lista, status, CSV, métricas.
 4. **Venda**: PayPal EUR (ordem, captura, webhook) · formulário de criação · e-mail de boas-vindas.
 5. **LP** + imagens ilustrativas + beacon de analytics.
