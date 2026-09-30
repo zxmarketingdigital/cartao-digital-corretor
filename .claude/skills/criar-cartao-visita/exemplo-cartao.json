@@ -1,0 +1,36 @@
+{
+  "slug": "beatriz-lisboa-demo",
+  "nome": "Beatriz Almeida (exemplo)",
+  "cargo": "Consultora imobiliária",
+  "agencia": "Lisboa Horizonte (fictícia)",
+  "ami": "00000",
+  "bio": "Exemplo fictício de cartão para uma consultora que acompanha compras e arrendamentos em Lisboa.",
+  "foto_url": null,
+  "telefone_e164": "+351210000000",
+  "whatsapp_e164": "+351910000000",
+  "email": "beatriz.almeida@example.invalid",
+  "morada": "Avenida da Liberdade, Lisboa (exemplo)",
+  "maps_url": "https://maps.example.invalid/lisboa",
+  "instagram": "https://instagram.example.invalid/beatriz-demo",
+  "facebook": null,
+  "tiktok": null,
+  "linkedin": null,
+  "site": "https://lisboa-horizonte.example.invalid",
+  "reviews_url": null,
+  "agenda_url": "https://agenda.example.invalid/beatriz-demo",
+  "servicos": ["Compra", "Arrendamento", "Avaliação de imóvel"],
+  "links": [
+    {
+      "titulo": "Imóveis em destaque",
+      "descricao": "Seleção fictícia para demonstração.",
+      "url": "https://lisboa-horizonte.example.invalid/imoveis"
+    }
+  ],
+  "notify_email": "beatriz.almeida@example.invalid",
+  "notify_whatsapp_e164": "+351910000000",
+  "chat_enabled": true,
+  "locale": "pt-PT",
+  "status": "ativo",
+  "owner_user_id": null,
+  "order_id": null
+}

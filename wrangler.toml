@@ -2,13 +2,27 @@ name = "zx-cartao"
 main = "worker/index.js"
 compatibility_date = "2026-09-01"
 
+# Imagens da LP (public/cartao-digital/img/*). O Worker trata tudo o resto.
+[assets]
+directory = "./public"
+
 [vars]
 PUBLIC_BASE_URL = ""
 EMAIL_FROM = ""
 EVOLUTION_INSTANCE = "avisos-cartao"
 CF_BEACON_TOKEN = ""
 ZX_CARD_SLUG = "zxlab"
+PAYPAL_ENV = "sandbox"
+PRODUCT_PRICE_EUR = "97.00"
+PAYPAL_CLIENT_ID = ""
+META_PIXEL_ID = ""
+# A anon key do Supabase é pública por desenho (o painel usa-a no browser; a RLS protege os dados).
+SUPABASE_ANON_KEY = ""
 
-# routes = [{pattern="<dominio>/c/*", zone_name="<dominio>"}, {pattern="<dominio>/cartao-visita*", zone_name="<dominio>"}]
-# Secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY,
-# EVOLUTION_API_URL, EVOLUTION_API_KEY
+# routes = [
+#   { pattern = "<dominio>/c/*", zone_name = "<dominio>" },
+#   { pattern = "<dominio>/cartao-visita*", zone_name = "<dominio>" },
+#   { pattern = "<dominio>/cartao-digital*", zone_name = "<dominio>" },
+# ]
+# Secrets (wrangler secret put <NOME>): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY,
+# EVOLUTION_API_URL, EVOLUTION_API_KEY, PAYPAL_CLIENT_SECRET, PAYPAL_WEBHOOK_ID

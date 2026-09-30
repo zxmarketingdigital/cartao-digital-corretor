@@ -6,7 +6,7 @@ Cartão de visita digital com **chat de captação**, **mini CRM** e **aviso de 
 - 🎨 **Mockups do visual (direção C · Metal):** [`design/`](design/) — abra os `.html` no navegador.
 - 🤖 **Instruções para o Claude Code:** [`CLAUDE.md`](CLAUDE.md) — o Claude lê isto sozinho.
 
-> O código está a ser construído neste mesmo repositório por fases (ver `SPEC.md` §13). Para receber as atualizações: `git pull`.
+> **Estado:** as 6 fases do `SPEC.md` §13 estão implementadas — cartão, chat + avisos, painel (mini CRM), venda PayPal + formulário de criação, LP e a skill `/criar-cartao-visita`. Para receber as atualizações: `git pull`.
 
 ---
 
@@ -58,6 +58,8 @@ O Claude vai conduzir os passos abaixo consigo.
    Depois, dentro do Claude, rode `/mcp` e autorize o Supabase no navegador.
 3. Guarde (vão para o `.env`): **Project URL**, **anon key** e **service_role key** (Settings → API).
 4. Em **Authentication → URL Configuration**, coloque o seu domínio em *Site URL* e `https://<seu-dominio>/c/painel` em *Redirect URLs*.
+5. Crie as tabelas: peça ao Claude *"aplique as migrations de `supabase/migrations/` por ordem no meu projeto Supabase"* (via MCP) — ou cole cada ficheiro, por ordem, no **SQL Editor**. Isto cria tabelas, regras de acesso (RLS) e o bucket `fotos`.
+6. Opcional: `supabase/seed-zxlab.sql` cria o cartão de exemplo servido em `/cartao-visita` (edite os dados antes).
 
 #### 2.3 Resend (API)
 1. Crie conta em resend.com → **Domains** → adicione o seu domínio e crie os registos DNS que ele pede (na Cloudflare).
@@ -73,7 +75,7 @@ O Claude vai conduzir os passos abaixo consigo.
 #### 2.5 PayPal (REST API, EUR)
 1. Conta **PayPal Business** → developer.paypal.com → **Apps & Credentials** → crie uma app (primeiro em **Sandbox**, depois **Live**).
 2. Guarde **Client ID** e **Secret**.
-3. Em **Webhooks** da app, adicione `https://<seu-dominio>/api/paypal/webhook` com o evento `PAYMENT.CAPTURE.COMPLETED` e guarde o **Webhook ID**.
+3. Em **Webhooks** da app, adicione `https://<seu-dominio>/c/api/paypal/webhook` com o evento `PAYMENT.CAPTURE.COMPLETED` e guarde o **Webhook ID**.
 4. Moeda: **EUR**.
 
 #### 2.6 Cloudflare Web Analytics (visitas)
@@ -85,11 +87,15 @@ Cloudflare → **Web Analytics** → *Add a site* → copie o **token** do beaco
 cp .env.example .env      # preencha os valores — o .env NUNCA vai para o git
 ```
 
-Para produção, o Claude envia cada valor como segredo do Worker:
+Para produção, os valores **públicos** vão em `[vars]` no `wrangler.toml` (`PUBLIC_BASE_URL`, `EMAIL_FROM`, `PAYPAL_CLIENT_ID`, `PAYPAL_ENV`, `SUPABASE_ANON_KEY`, `CF_BEACON_TOKEN`, `META_PIXEL_ID`) e os **segredos** entram um a um:
 
 ```bash
 wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 ```
+
+Segredos: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`.
+
+No `wrangler.toml`, ative as `routes` (estão comentadas) com o seu domínio: `/c/*`, `/cartao-visita*` e `/cartao-digital*`.
 
 ### 4. Publicar
 Quando o código de cada fase estiver pronto:
@@ -98,7 +104,27 @@ Quando o código de cada fase estiver pronto:
 wrangler deploy
 ```
 
-E confirme no navegador `https://<seu-dominio>/c/<um-slug-de-teste>`.
+E confirme no navegador:
+
+| Página | O que deve ver |
+|---|---|
+| `https://<seu-dominio>/cartao-digital` | LP de venda com o botão PayPal |
+| `https://<seu-dominio>/c/<slug>` | Um cartão (crie um de teste com a skill abaixo) |
+| `https://<seu-dominio>/c/painel` | Login do painel por link mágico |
+
+Teste a compra em **Sandbox** (conta de comprador de teste do PayPal) antes de passar `PAYPAL_ENV` para `live`.
+
+### 5. Testes automáticos
+
+```bash
+npm test
+```
+
+Não precisam de contas nem de rede — todas as chamadas externas são simuladas.
+
+### 6. Criar cartões pela linha de comando (skill)
+
+Dentro do Claude Code, neste repositório, peça *"cria um cartão de visita para …"*. A skill `/criar-cartao-visita` (em `.claude/skills/`) usa o `.env` e cria/edita/suspende cartões sem passar pelo pagamento — útil para oferecer, testar ou corrigir dados.
 
 ---
 
