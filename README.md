@@ -49,16 +49,23 @@ O Claude vai conduzir os passos abaixo consigo.
    ```
 3. Confirme: `wrangler whoami` mostra a sua conta.
 
-#### 2.2 Supabase (MCP oficial)
+#### 2.2 Supabase (API — sem MCP)
 1. Crie conta em supabase.com → **New project** (região: **EU — Frankfurt ou Paris**, por causa do RGPD).
-2. Ligue o MCP do Supabase ao seu Claude:
-   ```bash
-   claude mcp add --transport http supabase https://mcp.supabase.com/mcp
-   ```
-   Depois, dentro do Claude, rode `/mcp` e autorize o Supabase no navegador.
+2. Crie um **Access Token** em supabase.com/dashboard/account/tokens (começa por `sbp_`) e guarde-o no `.env` como `SUPABASE_ACCESS_TOKEN`, junto com `SUPABASE_PROJECT_REF` (o código do projeto, que aparece no URL do painel). Não é preciso MCP nem autorizar nada no navegador: o Claude fala com o Supabase pela **Management API** usando este token.
 3. Guarde (vão para o `.env`): **Project URL**, **anon key** e **service_role key** (Settings → API).
 4. Em **Authentication → URL Configuration**, coloque o seu domínio em *Site URL* e `https://<seu-dominio>/c/painel` em *Redirect URLs*.
-5. Crie as tabelas: peça ao Claude *"aplique as migrations de `supabase/migrations/` por ordem no meu projeto Supabase"* (via MCP) — ou cole cada ficheiro, por ordem, no **SQL Editor**. Isto cria tabelas, regras de acesso (RLS) e o bucket `fotos`.
+5. Crie as tabelas aplicando as migrations por ordem, via Management API (ou peça ao Claude *"aplique as migrations de `supabase/migrations/` por ordem via Management API"*):
+   ```bash
+   set -a; . ./.env; set +a
+   for f in supabase/migrations/*.sql; do
+     echo "→ $f"
+     python3 -c 'import json,sys;print(json.dumps({"query":open(sys.argv[1]).read()}))' "$f" \
+     | curl -sf -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+         -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
+         --data-binary @- > /dev/null || { echo "FALHOU em $f"; break; }
+   done
+   ```
+   Alternativa manual: colar cada ficheiro, por ordem, no **SQL Editor**. Isto cria tabelas, regras de acesso (RLS) e o bucket `fotos`.
 6. Opcional: `supabase/seed-zxlab.sql` cria o cartão de exemplo servido em `/cartao-visita` (edite os dados antes).
 
 #### 2.3 Resend (API)
