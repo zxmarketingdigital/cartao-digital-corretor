@@ -1,5 +1,5 @@
 import { isValidEmail, isValidSlug, normalizePhoneE164, RESERVED_SLUGS } from '../lib/validate.js';
-import { capturePaypalOrder, createPaypalOrder, paypalOrderId, productPrice, verifyPaypalWebhook } from '../lib/paypal.js';
+import { capturePaypalOrder, createPaypalOrder, getCaptureOrderId, paypalOrderId, productPrice, verifyPaypalWebhook } from '../lib/paypal.js';
 import * as db from '../lib/db-venda.js';
 import { sendWelcome } from '../lib/welcome.js';
 import { renderCriar, renderCriarDone, renderCriarPending } from '../render/criar.js';
@@ -9,6 +9,8 @@ const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SLUG_SYNTAX = /^[a-z0-9-]{3,40}$/;
 const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const CAPTURE_ID = /^[A-Za-z0-9_-]{8,64}$/;
+const CAPTURE_PATH = '/v2/payments/captures/';
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -43,6 +45,19 @@ function stringValue(value, max = Infinity) {
   const result = String(value ?? '').trim();
   if (result.length > max) fail('Campo demasiado longo.', 400);
   return result;
+}
+
+function captureIdFromLinks(links) {
+  if (!Array.isArray(links)) return null;
+  for (const link of links) {
+    if (String(link?.rel || '').toLowerCase() !== 'up') continue;
+    let pathname = '';
+    try { pathname = new URL(String(link?.href || '')).pathname; } catch { continue; }
+    if (!pathname.startsWith(CAPTURE_PATH)) continue;
+    const id = pathname.slice(CAPTURE_PATH.length);
+    if (CAPTURE_ID.test(id)) return id;
+  }
+  return null;
 }
 
 async function readBody(request) {
@@ -150,13 +165,45 @@ async function captureOrder(request, env) {
 async function webhook(request, env) {
   const { data, raw } = await readBody(request);
   if (!await verifyPaypalWebhook(env, request.headers, data, raw)) return json({ ok: false }, 400);
-  const orderId = data?.resource?.supplementary_data?.related_ids?.order_id;
   const type = String(data?.event_type || '').toUpperCase();
-  if (orderId && type === 'PAYMENT.CAPTURE.COMPLETED') {
-    await db.patchOrderByPaypalOrderId(env, orderId, 'criado', { status: 'pago', paid_at: new Date().toISOString() });
-  } else if (orderId && type === 'PAYMENT.CAPTURE.REFUNDED') {
-    await db.patchOrderByPaypalOrderId(env, orderId, 'pago', { status: 'reembolsado' });
+  const resource = data?.resource || {};
+  const declaredOrderId = resource?.supplementary_data?.related_ids?.order_id;
+
+  if (type === 'PAYMENT.CAPTURE.COMPLETED') {
+    const expected = productPrice(env).toFixed(2);
+    const valid = resource?.status === 'COMPLETED'
+      && resource?.amount?.value === expected
+      && resource?.amount?.currency_code === 'EUR';
+    if (!valid) {
+      console.error('PAYMENT.CAPTURE.COMPLETED divergente');
+      return json({ ok: true });
+    }
+    if (declaredOrderId) {
+      await db.patchOrderByPaypalOrderId(env, String(declaredOrderId), 'criado', { status: 'pago', paid_at: new Date().toISOString() });
+    }
+    return json({ ok: true });
   }
+
+  if (type === 'PAYMENT.CAPTURE.REFUNDED') {
+    let orderId = declaredOrderId ? String(declaredOrderId) : null;
+    if (!orderId) {
+      const captureId = captureIdFromLinks(resource?.links);
+      if (captureId) {
+        try {
+          const resolved = await getCaptureOrderId(env, captureId);
+          orderId = resolved ? String(resolved) : null;
+        } catch (error) {
+          console.error('PAYMENT.CAPTURE.REFUNDED resolução falhou');
+          throw error;
+        }
+      }
+    }
+    if (orderId) {
+      await db.patchOrderByPaypalOrderIdStatuses(env, orderId, ['criado', 'pago'], { status: 'reembolsado' });
+    }
+    return json({ ok: true });
+  }
+
   return json({ ok: true });
 }
 
@@ -209,7 +256,7 @@ export async function handleVendaRoute(request, env, ctx, path, url) {
       const order = await db.getOrderById(env, pedido);
       if (!order || order.status !== 'pago') return new Response(renderCriarPending(env), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
       if (await db.getCardByOrderId(env, pedido)) return new Response(renderCriarDone(env), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
-      return new Response(renderCriar(env, pedido), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+      return new Response(renderCriar(env, pedido, order.buyer_email || ''), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
     }
     if (pathname === '/c/api/paypal/order') return await createOrder(request, env);
     if (pathname === '/c/api/paypal/capture') return await captureOrder(request, env);

@@ -1,6 +1,7 @@
 const DEFAULT_SANDBOX = 'https://api-m.sandbox.paypal.com';
 const DEFAULT_LIVE = 'https://api-m.paypal.com';
 const tokenCache = new WeakMap();
+const CAPTURE_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
 export class PaypalError extends Error {
   constructor(message, status = 502, details = null) {
@@ -12,7 +13,7 @@ export class PaypalError extends Error {
 }
 
 function paypalBase(env) {
-  return String(env.PAYPAL_API_URL || env.PAYPAL_API_BASE || env.PAYPAL_BASE_URL || (String(env.PAYPAL_ENV || env.PAYPAL_MODE).toLowerCase() === 'live' ? DEFAULT_LIVE : DEFAULT_SANDBOX)).replace(/\/$/, '');
+  return env.PAYPAL_ENV === 'live' ? DEFAULT_LIVE : DEFAULT_SANDBOX;
 }
 
 function basicAuth(client, secret) {
@@ -97,6 +98,13 @@ export async function createPaypalOrder(env, orderUuid) {
 export async function capturePaypalOrder(env, paypalOrderId) {
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(String(paypalOrderId))) throw new PaypalError('Identificador PayPal inválido', 400);
   return authenticatedRequest(env, `/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/capture`, 'POST', {});
+}
+
+export async function getCaptureOrderId(env, captureId) {
+  const id = String(captureId ?? '');
+  if (!CAPTURE_ID.test(id)) throw new PaypalError('Identificador PayPal inválido', 400);
+  const body = await authenticatedRequest(env, `/v2/payments/captures/${encodeURIComponent(id)}`, 'GET');
+  return body?.supplementary_data?.related_ids?.order_id || null;
 }
 
 export async function verifyPaypalWebhook(env, headers, event, rawBody = '') {

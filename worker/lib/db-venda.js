@@ -65,6 +65,13 @@ export async function patchOrderByPaypalOrderId(env, paypalId, expectedStatus, c
   return first(await request(env, restPath('orders', '?paypal_order_id=eq.' + encodeURIComponent(paypalId) + '&status=eq.' + encodeURIComponent(expectedStatus)), { method: 'PATCH', body: changes }));
 }
 
+export async function patchOrderByPaypalOrderIdStatuses(env, paypalId, statuses, changes) {
+  const list = (Array.isArray(statuses) ? statuses : [statuses])
+    .map((status) => encodeURIComponent(String(status)))
+    .join(',');
+  return first(await request(env, restPath('orders', '?paypal_order_id=eq.' + encodeURIComponent(paypalId) + '&status=in.(' + list + ')'), { method: 'PATCH', body: changes }));
+}
+
 export async function getCardBySlug(env, slug) {
   return first(await request(env, restPath('cards', '?slug=eq.' + encodeURIComponent(slug) + '&select=*&limit=1')));
 }

@@ -2,21 +2,32 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handleVendaRoute } from '../worker/routes/venda.js';
 
-const env = { PAYPAL_CLIENT_ID: 'client', PAYPAL_CLIENT_SECRET: 'secret', PAYPAL_WEBHOOK_ID: 'webhook', SUPABASE_URL: 'https://db.test', SUPABASE_SERVICE_ROLE_KEY: 'service', RESEND_API_KEY: 'resend', EMAIL_FROM: 'Cartão <noreply@example.test>', PUBLIC_BASE_URL: 'https://app.test', PRODUCT_PRICE_EUR: '123.45', PAYPAL_API_URL: 'https://paypal.test' };
+const env = { PAYPAL_CLIENT_ID: 'client', PAYPAL_CLIENT_SECRET: 'secret', PAYPAL_WEBHOOK_ID: 'webhook', SUPABASE_URL: 'https://db.test', SUPABASE_SERVICE_ROLE_KEY: 'service', RESEND_API_KEY: 'resend', EMAIL_FROM: 'Cartão <noreply@example.test>', PUBLIC_BASE_URL: 'https://app.test', PRODUCT_PRICE_EUR: '123.45', PAYPAL_ENV: 'sandbox', PAYPAL_API_URL: 'https://paypal.invalid', PAYPAL_API_BASE: 'https://paypal.invalid', PAYPAL_BASE_URL: 'https://paypal.invalid', PAYPAL_MODE: 'live' };
 let orders;
 let cards;
 let paypalCalls;
 let patches;
+let patchAttempts;
 let captureMode;
 let resendCalls;
+
+function matchesFilter(item, key, value) {
+  if (value.startsWith('eq.')) return String(item[key]) === value.slice(3);
+  if (value.startsWith('in.(') && value.endsWith(')')) {
+    const list = value.slice(4, -1).split(',').map((entry) => decodeURIComponent(entry));
+    return list.includes(String(item[key]));
+  }
+  return true;
+}
 
 async function stubFetch(input, options = {}) {
   const request = input instanceof Request ? input : new Request(input, options);
   const url = new URL(request.url);
-  if (url.host === 'paypal.test') {
+  if (url.host === 'api-m.sandbox.paypal.com') {
     paypalCalls.push({ method: request.method, url: request.url, body: request.method === 'GET' ? null : await request.clone().text() });
     if (url.pathname === '/v1/oauth2/token') return new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 }), { headers: { 'content-type': 'application/json' } });
     if (url.pathname === '/v2/checkout/orders') return new Response(JSON.stringify({ id: 'PAYPAL-ORDER-1', status: 'CREATED' }), { headers: { 'content-type': 'application/json' } });
+    if (url.pathname.startsWith('/v2/payments/captures/')) return new Response(JSON.stringify({ supplementary_data: { related_ids: { order_id: 'PAYPAL-ORDER-1' } } }), { headers: { 'content-type': 'application/json' } });
     if (url.pathname.endsWith('/capture')) {
       const good = captureMode !== 'divergent';
       return new Response(JSON.stringify({ status: 'COMPLETED', payer: { email_address: 'buyer@example.test' }, purchase_units: [{ payments: { captures: [{ id: 'CAPTURE-1', amount: { value: good ? '123.45' : '1.00', currency_code: good ? 'EUR' : 'USD' } }] } }] }), { headers: { 'content-type': 'application/json' } });
@@ -47,7 +58,9 @@ async function stubFetch(input, options = {}) {
       }
       if (request.method === 'PATCH') {
         const target = orders;
-        const found = target.find(item => [...url.searchParams].filter(([key]) => key !== 'select').every(([key, value]) => !value.startsWith('eq.') || String(item[key]) === value.slice(3)));
+        const filters = [...url.searchParams].filter(([key]) => key !== 'select');
+        patchAttempts.push({ url: request.url, body });
+        const found = target.find(item => filters.every(([key, value]) => matchesFilter(item, key, value)));
         if (!found) return new Response('[]', { headers: { 'content-type': 'application/json' } });
         Object.assign(found, body);
         patches.push({ url: request.url, body });
@@ -66,6 +79,7 @@ test.beforeEach(() => {
   cards = [];
   paypalCalls = [];
   patches = [];
+  patchAttempts = [];
   captureMode = 'good';
   resendCalls = 0;
   globalThis.fetch = stubFetch;
@@ -74,6 +88,7 @@ test.after(() => { globalThis.fetch = originalFetch; });
 
 function req(path, options = {}) { return new Request(`https://app.test${path}`, options); }
 function order(id = '00000000-0000-4000-8000-000000000001', status = 'criado') { return { id, idempotency_key: 'key', paypal_order_id: 'PAYPAL-ORDER-1', status, amount_cents: 12345, currency: 'EUR' }; }
+function completedBody(value = '123.45', currency = 'EUR') { return JSON.stringify({ event_type: 'PAYMENT.CAPTURE.COMPLETED', resource: { status: 'COMPLETED', amount: { value, currency_code: currency }, supplementary_data: { related_ids: { order_id: 'PAYPAL-ORDER-1' } } } }); }
 const webhookHeaders = { 'content-type': 'application/json', 'paypal-auth-algo': 'a', 'paypal-cert-url': 'b', 'paypal-transmission-id': 'c', 'paypal-transmission-sig': 'd', 'paypal-transmission-time': 'e' };
 
  test('preço é sempre o do servidor e a ordem usa orders', async () => {
@@ -105,7 +120,7 @@ test('webhook inválido é rejeitado e eventos REFUNDED/COMPLETED são idempoten
   orders.push(order());
   const invalid = await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', body: '{}' }), env);
   assert.equal(invalid.status, 400);
-  const completed = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.COMPLETED', resource: { supplementary_data: { related_ids: { order_id: 'PAYPAL-ORDER-1' } } } });
+  const completed = completedBody();
   assert.equal((await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body: completed }), env)).status, 200);
   assert.equal(orders[0].status, 'pago');
   const refunded = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.REFUNDED', resource: { supplementary_data: { related_ids: { order_id: 'PAYPAL-ORDER-1' } } } });
@@ -115,6 +130,56 @@ test('webhook inválido é rejeitado e eventos REFUNDED/COMPLETED são idempoten
   await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body: refunded }), env);
   assert.equal(patches.length, count);
  });
+
+test('webhook COMPLETED com valor divergente não faz PATCH', async () => {
+  orders.push(order());
+  const response = await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body: completedBody('1.00', 'EUR') }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.equal(patches.length, 0);
+  assert.equal(patchAttempts.length, 0);
+  assert.equal(orders[0].status, 'criado');
+});
+
+test('webhook COMPLETED com moeda USD não faz PATCH', async () => {
+  orders.push(order());
+  const response = await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body: completedBody('123.45', 'USD') }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.equal(patches.length, 0);
+  assert.equal(patchAttempts.length, 0);
+  assert.equal(orders[0].status, 'criado');
+});
+
+test('webhook REFUNDED usa status=in.(criado,pago)', async () => {
+  orders.push(order('00000000-0000-4000-8000-000000000001', 'pago'));
+  const body = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.REFUNDED', resource: { supplementary_data: { related_ids: { order_id: 'PAYPAL-ORDER-1' } } } });
+  const response = await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body }), env);
+  assert.equal(response.status, 200);
+  assert.equal(orders[0].status, 'reembolsado');
+  assert.ok(patches.some((patch) => /status=in\.\(criado,pago\)/.test(patch.url)), 'filtro in.(criado,pago)');
+});
+
+test('webhook REFUNDED sem order_id resolve via GET /v2/payments/captures/<id> no host sandbox', async () => {
+  orders.push(order('00000000-0000-4000-8000-000000000001', 'pago'));
+  const body = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.REFUNDED', resource: { links: [{ rel: 'up', href: 'https://captures.example.test/v2/payments/captures/CAPTURE-1' }] } });
+  const response = await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body }), env);
+  assert.equal(response.status, 200);
+  const lookup = paypalCalls.find((call) => call.method === 'GET' && call.url.includes('/v2/payments/captures/CAPTURE-1'));
+  assert.ok(lookup, 'deve consultar o capture no PayPal');
+  assert.match(lookup.url, /^https:\/\/api-m\.sandbox\.paypal\.com/);
+  assert.equal(orders[0].status, 'reembolsado');
+  assert.ok(patches.some((patch) => /status=in\.\(criado,pago\)/.test(patch.url)));
+});
+
+test('webhook COMPLETED depois de reembolsado não altera e mantém status=eq.criado', async () => {
+  orders.push(order('00000000-0000-4000-8000-000000000001', 'reembolsado'));
+  const response = await handleVendaRoute(req('/c/api/paypal/webhook', { method: 'POST', headers: webhookHeaders, body: completedBody() }), env);
+  assert.equal(response.status, 200);
+  assert.equal(orders[0].status, 'reembolsado');
+  assert.equal(patches.length, 0);
+  assert.ok(patchAttempts.some((attempt) => /status=eq\.criado/.test(attempt.url)), 'filtro eq.criado mantido');
+});
 
 test('slug distingue inválido, reservado, ocupado e livre', async () => {
   cards.push({ slug: 'ana-costa' });
@@ -167,3 +232,9 @@ test('criar sem pedido UUID responde 404 e pedido reembolsado não libera formul
 test('host não previsto lança no stub', async () => {
   await assert.rejects(() => stubFetch('https://host-desconhecido.test/x'), /host não stubado/);
  });
+
+test('formulário pré-preenche o e-mail do comprador escapado', async () => {
+  const { renderCriar } = await import('../worker/render/criar.js');
+  const out = renderCriar({}, '11111111-1111-4111-8111-111111111111', 'a"b@x.pt');
+  assert.match(out, /name="email"[^>]*value="a&quot;b@x\.pt"/);
+});

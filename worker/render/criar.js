@@ -1,7 +1,7 @@
 import { escapeAttr } from '../lib/escape.js';
 import { renderLayout } from './layout.js';
 
-export function renderCriar(env = {}, pedido = '') {
+export function renderCriar(env = {}, pedido = '', buyerEmail = '') {
   const body = '<main class="page"><section><p class="eyebrow">CARTÃO DIGITAL</p><h1>Criar o seu cartão digital</h1><p class="bio">Preencha os seus dados. Pode alterar tudo mais tarde no painel.</p>'
     + '<form class="cd-form" method="post" action="/c/api/cartao" enctype="multipart/form-data">'
     + '<input type="hidden" name="pedido" value="' + escapeAttr(pedido) + '">'
@@ -11,7 +11,7 @@ export function renderCriar(env = {}, pedido = '') {
     + '<label>Fotografia<input type="file" name="foto" accept="image/jpeg,image/png,image/webp"></label>'
     + '<label>Telemóvel<input name="telefone" inputmode="tel" autocomplete="tel" maxlength="40"></label>'
     + '<label>WhatsApp*<input name="whatsapp" required inputmode="tel" autocomplete="tel" maxlength="40"></label>'
-    + '<label>E-mail*<input type="email" name="email" required maxlength="254" autocomplete="email"></label>'
+    + '<label>E-mail*<input type="email" name="email" required maxlength="254" autocomplete="email" value="' + escapeAttr(buyerEmail || '') + '"></label>'
     + '<label>Morada<textarea name="morada" maxlength="300"></textarea></label>'
     + '<label>Instagram<input name="instagram" maxlength="120"></label><label>Facebook<input name="facebook" maxlength="120"></label><label>TikTok<input name="tiktok" maxlength="120"></label><label>LinkedIn<input name="linkedin" maxlength="300"></label>'
     + '<label>Site<input name="site" type="url" maxlength="500"></label><label>Link de avaliações<input name="reviews_url" type="url" maxlength="500"></label><label>Link de agenda<input name="agenda_url" type="url" maxlength="500"></label>'
