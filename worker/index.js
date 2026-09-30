@@ -6,6 +6,9 @@ import { renderCard } from './render/card.js';
 import { renderChatPage } from './render/chat.js';
 import { renderVcard } from './render/vcard.js';
 import { renderNotFound } from './render/notfound.js';
+import { renderLp } from './render/lp.js';
+import { handlePainelRoute } from './routes/painel.js';
+import { handleVendaRoute } from './routes/venda.js';
 
 const htmlHeaders = {
   'content-type': 'text/html; charset=utf-8',
@@ -171,6 +174,14 @@ async function route(request, env, ctx) {
     if (request.method !== 'POST') return json({ ok: false }, 405);
     return handleLead(request, env, ctx);
   }
+  if (path === '/cartao-digital') {
+    if (request.method !== 'GET' && request.method !== 'HEAD') return html('', 405);
+    return html(renderLp(env));
+  }
+  const venda = await handleVendaRoute(request, env, ctx, path, url);
+  if (venda) return venda;
+  const painel = await handlePainelRoute(request, env, ctx, path);
+  if (painel) return painel;
   if (path === '/cartao-visita') {
     if (request.method !== 'GET') return html('', 405);
     const slug = env.ZX_CARD_SLUG || 'zxlab';

@@ -58,9 +58,9 @@ test('rotas de cartão, visita, reserva, cartão ZX e vcard', async () => {
     assert.equal(noVisit.status, 200);
     assert.equal(fetcher.calls.slice(before).some((call) => call.url.includes('/rpc/increment_visit')), false);
 
-    const reserved = await worker.fetch(new Request('https://cartao.example/c/painel'), env, makeCtx());
+    const reserved = await worker.fetch(new Request('https://cartao.example/c/admin'), env, makeCtx());
     assert.equal(reserved.status, 404);
-    assert.equal(fetcher.calls.slice(before).some((call) => call.url.includes('slug=eq.painel')), false);
+    assert.equal(fetcher.calls.slice(before).some((call) => call.url.includes('slug=eq.admin')), false);
 
     const zx = await worker.fetch(new Request('https://cartao.example/cartao-visita'), env, makeCtx());
     assert.equal(zx.status, 200);
